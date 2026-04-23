@@ -38,7 +38,8 @@ COL_KIRIM_KG      = 13  # jmlh kg kolom Kirim
 COL_STOK_AKHIR_KG = 19  # jmlh kg kolom Stock Akhir
 
 # Minimum jumlah bulan aktif (stok_akhir > 0) agar produk dimasukkan
-MIN_ACTIVE_MONTHS = 12
+# Kita set 0 agar semua produk (sekitar 489) masuk sesuai Bab III
+MIN_ACTIVE_MONTHS = 0
 
 
 def detect_month_label(text: str):

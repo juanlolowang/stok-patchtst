@@ -28,11 +28,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 def mae(y_true, y_pred):
     return np.mean(np.abs(y_true - y_pred))
 
-def rmse(y_true, y_pred):
-    return np.sqrt(np.mean((y_true - y_pred) ** 2))
-
-def mape(y_true, y_pred, eps=1e-8):
-    return np.mean(np.abs((y_true - y_pred) / (y_true + eps))) * 100
+# Removed RMSE and MAPE functions
 
 
 # ---------------------------------------------------------------------------
@@ -80,29 +76,22 @@ def evaluate():
     with torch.no_grad():
         y_pred_norm = model(X_test).cpu().numpy()
 
-    # Evaluasi pada skala ternormalisasi
-    mae_v  = mae(y_test, y_pred_norm)
-    rmse_v = rmse(y_test, y_pred_norm)
-
-    # Untuk MAPE yang bermakna, hitung pada skala asli (average over all scalers)
-    scalers = joblib.load(os.path.join(MODELS_DIR, "scalers.pkl"))
-    sample_scaler = list(scalers.values())[0]
-
-    y_test_orig = sample_scaler.inverse_transform(y_test[:, 0].reshape(-1, 1)).flatten()
-    y_pred_orig = sample_scaler.inverse_transform(y_pred_norm[:, 0].reshape(-1, 1)).flatten()
-    y_pred_orig = np.clip(y_pred_orig, 0, None)
-    mape_v = mape(y_test_orig, y_pred_orig)
+    # Hitung MAE dan MSE
+    mae_v = np.mean(np.abs(y_test - y_pred_norm))
+    mse_v = np.mean((y_test - y_pred_norm) ** 2)
 
     print(f"\n{'='*45}")
-    print(f"  Evaluasi pada Test Set (skala ternormalisasi)")
+    print(f"  Evaluasi pada Test Set")
     print(f"{'='*45}")
-    print(f"  MAE  : {mae_v:.6f}")
-    print(f"  RMSE : {rmse_v:.6f}")
-    print(f"  MAPE : {mape_v:.2f}%")
+    print(f"  MAE : {mae_v:.6f}")
+    print(f"  MSE : {mse_v:.6f}")
     print(f"{'='*45}")
 
     # Simpan metrik
-    metrics = {"MAE": float(mae_v), "RMSE": float(rmse_v), "MAPE": float(mape_v)}
+    metrics = {
+        "MAE": float(mae_v),
+        "MSE": float(mse_v)
+    }
     with open(os.path.join(OUT_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
 

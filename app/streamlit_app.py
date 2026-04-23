@@ -99,8 +99,9 @@ with st.sidebar:
     <div style='text-align:center; padding: 20px 0 16px'>
         <div style='font-size:2.5rem'>🏭</div>
         <div style='font-size:1.1rem; font-weight:700; color:white;'>StokAI</div>
-        <div style='font-size:0.75rem; color:#8888aa;'>Prediksi Stok Bahan Jadi</div>
-        <div style='margin-top:8px' class='chip chip-purple'>PatchTST · v2.0</div>
+        <div style='font-size:0.75rem; color:#8888aa;'>Bahan Jadi Obat Kain</div>
+        <div style='font-size:0.85rem; font-weight:600; color:var(--accent2); margin-top:4px;'>PT. Seikyo Indochem</div>
+        <div style='margin-top:8px' class='chip chip-purple'>PatchTST · v2.1</div>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("---")
@@ -130,8 +131,8 @@ with st.sidebar:
 if page == "🏠  Beranda":
     st.markdown("""
     <div class="hero-banner">
-        <div class="hero-title">🏭 Prediksi Stok Bahan Jadi</div>
-        <div class="hero-sub">Sistem cerdas berbasis <strong>PatchTST</strong> — Patch Time-Series Transformer untuk perencanaan stok bahan jadi secara akurat.</div>
+        <div class="hero-title">🏭 Prediksi Stok Bahan Jadi Obat Kain</div>
+        <div class="hero-sub">Sistem cerdas berbasis <strong>PatchTST</strong> untuk optimasi inventaris di <strong>PT. Seikyo Indochem</strong>.</div>
         <div>
             <span class="chip chip-purple">PatchTST</span>
             <span class="chip chip-blue">Deep Learning</span>
@@ -191,7 +192,7 @@ if page == "🏠  Beranda":
                                   mode="lines+markers", name="Total Kirim (kg)",
                                   line=dict(color="#7c5cfc", width=2), marker=dict(size=4)))
         fig.update_layout(**PLOTLY_LAYOUT, title="Total Kirim Bulanan (Semua Produk)", yaxis_title="kg")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 # ── PAGE 2: EDA ──
 elif page == "📊  Analisis EDA":
@@ -212,7 +213,7 @@ elif page == "📊  Analisis EDA":
                                           line=dict(color=PRODUCT_COLORS[i % len(PRODUCT_COLORS)], width=2),
                                           marker=dict(size=4)))
             fig.update_layout(**PLOTLY_LAYOUT, title="Tren Stok Akhir Bulanan (kg)")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
     with tab2:
         kode_sel = st.selectbox("Pilih Produk:", products, key="eda2")
@@ -226,20 +227,20 @@ elif page == "📊  Analisis EDA":
             monthly["bulan_str"] = monthly["bulan"].apply(lambda x: bulan_label[x-1])
             fig2 = px.bar(monthly, x="bulan_str", y="kirim_kg", color="kirim_kg", color_continuous_scale="Purples", title="Rata-rata Kirim per Bulan (kg)")
             fig2.update_layout(**PLOTLY_LAYOUT)
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width="stretch")
         with col2:
             monthly2 = sub.groupby("bulan")["terima_kg"].mean().reset_index()
             monthly2["bulan_str"] = monthly2["bulan"].apply(lambda x: bulan_label[x-1])
             fig3 = px.bar(monthly2, x="bulan_str", y="terima_kg", color="terima_kg", color_continuous_scale="Blues", title="Rata-rata Terima per Bulan (kg)")
             fig3.update_layout(**PLOTLY_LAYOUT)
-            st.plotly_chart(fig3, use_container_width=True)
+            st.plotly_chart(fig3, width="stretch")
 
     with tab3:
         top_prods = df_all.groupby("produk")["stok_akhir_kg"].mean().nlargest(15).index.tolist()
         df_top = df_all[df_all["produk"].isin(top_prods)]
         fig4 = px.box(df_top, x="produk", y="stok_akhir_kg", color="produk", color_discrete_sequence=PRODUCT_COLORS, title="Distribusi Stok Akhir (Top 15 Produk)")
         fig4.update_layout(**PLOTLY_LAYOUT, showlegend=False, xaxis_tickangle=-45)
-        st.plotly_chart(fig4, use_container_width=True)
+        st.plotly_chart(fig4, width="stretch")
 
     with tab4:
         kode_sel2 = st.selectbox("Produk:", products, key="eda4")
@@ -248,7 +249,7 @@ elif page == "📊  Analisis EDA":
         fig5.add_trace(go.Bar(x=sub2["bulan_tahun"], y=sub2["kirim_kg"], name="Kirim (kg)", marker_color="#7c5cfc", opacity=0.8), secondary_y=False)
         fig5.add_trace(go.Scatter(x=sub2["bulan_tahun"], y=sub2["terima_kg"], name="Terima (kg)", line=dict(color="#ff8a65", width=2)), secondary_y=True)
         fig5.update_layout(**PLOTLY_LAYOUT, title=f"Terima vs Kirim — {kode_sel2}")
-        st.plotly_chart(fig5, use_container_width=True)
+        st.plotly_chart(fig5, width="stretch")
 
 # ── PAGE 3: Prediksi ──
 elif page == "🔮  Prediksi":
@@ -262,7 +263,7 @@ elif page == "🔮  Prediksi":
     with col_l:
         st.markdown("**Pengaturan Prediksi**")
         sel_produk = st.selectbox("Produk:", products)
-        run_btn = st.button("🚀 Jalankan Prediksi", use_container_width=True)
+        run_btn = st.button("🚀 Jalankan Prediksi", width="stretch")
 
     with col_r:
         if run_btn:
@@ -289,12 +290,12 @@ elif page == "🔮  Prediksi":
                                               line=dict(color="#ff8a65", width=2.5), marker=dict(size=6, color="#ff8a65")))
                     fig.add_vline(x=dates[0], line_dash="dash", line_color="#888888", opacity=0.6)
                     fig.update_layout(**PLOTLY_LAYOUT, title=f"Prediksi Stok — {sel_produk}", yaxis_title="Stok (kg)")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
 
                     st.markdown("**📋 Tabel Prediksi**")
                     df_pred = pd.DataFrame({"Bulan": dates, "Prediksi (kg)": [fmt_number(p) for p in preds],
                                             "Min (−10%)": [fmt_number(p*0.9) for p in preds], "Max (+10%)": [fmt_number(p*1.1) for p in preds]})
-                    st.dataframe(df_pred, use_container_width=True, hide_index=True)
+                    st.dataframe(df_pred, width="stretch", hide_index=True)
 
                     avg_pred = np.mean(preds)
                     if avg_pred < np.mean(hist) * 0.7:
@@ -319,13 +320,11 @@ elif page == "📈  Evaluasi Model":
     if os.path.exists(metrics_path):
         with open(metrics_path) as f:
             metrics = json.load(f)
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f'<div class="metric-card"><div class="metric-val">{metrics["MAE"]:.4f}</div><div class="metric-label">MAE</div><div class="metric-unit">Mean Absolute Error (norm.)</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card"><div class="metric-val">{metrics["MSE"]:.6f}</div><div class="metric-label">MSE</div><div class="metric-unit">Mean Squared Error</div></div>', unsafe_allow_html=True)
         with col2:
-            st.markdown(f'<div class="metric-card"><div class="metric-val">{metrics["RMSE"]:.4f}</div><div class="metric-label">RMSE</div><div class="metric-unit">Root Mean Squared Error (norm.)</div></div>', unsafe_allow_html=True)
-        with col3:
-            st.markdown(f'<div class="metric-card"><div class="metric-val">{metrics["MAPE"]:.2f}%</div><div class="metric-label">MAPE</div><div class="metric-unit">Mean Absolute Percentage Error</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card"><div class="metric-val">{metrics["MAE"]:.6f}</div><div class="metric-label">MAE</div><div class="metric-unit">Mean Absolute Error</div></div>', unsafe_allow_html=True)
     else:
         st.info("Metrik belum tersedia. Jalankan `python src/evaluate.py`.")
 
@@ -340,12 +339,12 @@ elif page == "📈  Evaluasi Model":
         fig.add_trace(go.Scatter(x=epochs, y=history["train_loss"], mode="lines", name="Train Loss", line=dict(color="#81c784", width=2)))
         fig.add_trace(go.Scatter(x=epochs, y=history["val_loss"], mode="lines", name="Val Loss", line=dict(color="#e57373", width=2)))
         fig.update_layout(**PLOTLY_LAYOUT, title="Training vs Validation Loss", xaxis_title="Epoch", yaxis_title="MSE Loss")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     eval_img = os.path.join(OUT_DIR, "evaluation.png")
     if os.path.exists(eval_img):
         st.markdown('<div class="section-title">🖼 Plot Prediksi vs Aktual</div>', unsafe_allow_html=True)
-        st.image(eval_img, use_container_width=True)
+        st.image(eval_img, width="stretch")
 
     ckpt_path = os.path.join(MODELS_DIR, "best_model.pt")
     if os.path.exists(ckpt_path):
