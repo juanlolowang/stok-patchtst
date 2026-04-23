@@ -107,7 +107,7 @@ def evaluate():
         json.dump(metrics, f, indent=2)
 
     # -----------------------------------------------------------------------
-    # Plot 1: Prediksi vs Aktual (sample 200 titik pertama)
+    # Plot 1: Prediksi vs Aktual (sample titik pertama)
     # -----------------------------------------------------------------------
     N = min(200, len(y_test))
     y_true_flat = y_test[:N, 0]
@@ -115,13 +115,13 @@ def evaluate():
 
     plt.style.use("dark_background")
     fig, axes = plt.subplots(2, 1, figsize=(14, 8))
-    fig.suptitle("Prediksi Stok Bahan Jadi Obat Kain — PatchTST", fontsize=14, fontweight="bold", color="white")
+    fig.suptitle("Prediksi Stok Bahan Jadi — PatchTST", fontsize=14, fontweight="bold", color="white")
 
     ax = axes[0]
     ax.plot(y_true_flat, label="Aktual",  color="#4FC3F7", linewidth=1.5)
     ax.plot(y_pred_flat, label="Prediksi",color="#FF8A65", linewidth=1.5, linestyle="--")
     ax.fill_between(range(N), y_true_flat, y_pred_flat, alpha=0.15, color="#FFD54F")
-    ax.set_title("Prediksi vs Aktual (sample 200 hari · langkah pertama horizon)", color="white")
+    ax.set_title("Prediksi vs Aktual (sample · langkah pertama horizon)", color="white")
     ax.set_xlabel("Indeks Sampel"); ax.set_ylabel("Stok (ternormalisasi)")
     ax.legend(); ax.grid(alpha=0.2)
 

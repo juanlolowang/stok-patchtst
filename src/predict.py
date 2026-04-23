@@ -15,9 +15,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 from model import PatchTST
 
 BASE       = os.path.dirname(__file__)
-DATA_DIR   = os.path.join(BASE, "..", "data", "processed")
 MODELS_DIR = os.path.join(BASE, "..", "models")
-RAW_PATH   = os.path.join(BASE, "..", "data", "raw", "stok_obat_kain.csv")
+CSV_PATH   = os.path.join(BASE, "..", "data", "processed", "bahan_jadi_bulanan.csv")
 
 
 def load_model_and_scalers(device: torch.device):
@@ -53,7 +52,7 @@ def load_model_and_scalers(device: torch.device):
 
 
 def predict_product(
-    kode_produk: str,
+    produk: str,
     model: PatchTST,
     scalers: dict,
     cfg: dict,
@@ -61,29 +60,31 @@ def predict_product(
     raw_df: pd.DataFrame | None = None,
 ) -> dict:
     """
-    Prediksi `pred_len` hari ke depan untuk produk tertentu.
+    Prediksi `pred_len` bulan ke depan untuk produk tertentu.
 
     Returns dict:
-        tanggal_prediksi : list of str
-        prediksi_stok    : list of float (skala asli)
+        bulan_prediksi   : list of str (format YYYY-MM)
+        prediksi_stok    : list of float (skala asli, kg)
         last_history     : list of float (lookback window, skala asli)
+        history_months   : list of str (bulan lookback)
     """
     seq_len  = cfg["seq_len"]
     pred_len = cfg["pred_len"]
 
     if raw_df is None:
-        raw_df = pd.read_csv(RAW_PATH, parse_dates=["tanggal"])
+        raw_df = pd.read_csv(CSV_PATH)
 
-    subset = raw_df[raw_df["kode_produk"] == kode_produk].sort_values("tanggal")
+    subset = raw_df[raw_df["produk"] == produk].sort_values("bulan_tahun")
     if len(subset) < seq_len:
-        raise ValueError(f"Data {kode_produk} kurang dari {seq_len} baris.")
+        raise ValueError(f"Data {produk} kurang dari {seq_len} baris.")
 
-    scaler = scalers.get(kode_produk)
+    scaler = scalers.get(produk)
     if scaler is None:
-        raise KeyError(f"Scaler untuk {kode_produk} tidak ditemukan.")
+        raise KeyError(f"Scaler untuk {produk} tidak ditemukan.")
 
     # Ambil lookback terakhir
-    raw_vals = subset["stok_akhir"].values[-seq_len:].astype(float)
+    raw_vals = subset["stok_akhir_kg"].values[-seq_len:].astype(float)
+    history_months = subset["bulan_tahun"].values[-seq_len:].tolist()
     scaled   = scaler.transform(raw_vals.reshape(-1, 1)).flatten()
 
     # Tensor (1, 1, seq_len)
@@ -96,15 +97,17 @@ def predict_product(
     y_pred = scaler.inverse_transform(y_norm.reshape(-1, 1)).flatten()
     y_pred = np.clip(y_pred, 0, None)                # stok tidak bisa negatif
 
-    # Tanggal prediksi
-    last_date = subset["tanggal"].iloc[-1]
-    tanggal_pred = pd.date_range(last_date + pd.Timedelta(days=1), periods=pred_len, freq="D")
+    # Bulan prediksi: mulai dari bulan setelah data terakhir
+    last_month = subset["bulan_tahun"].iloc[-1]
+    last_date = pd.to_datetime(last_month + "-01")
+    bulan_pred = pd.date_range(last_date + pd.DateOffset(months=1), periods=pred_len, freq="MS")
 
     return {
-        "kode_produk":     kode_produk,
-        "tanggal_prediksi": [t.strftime("%Y-%m-%d") for t in tanggal_pred],
+        "produk":          produk,
+        "bulan_prediksi":  [t.strftime("%Y-%m") for t in bulan_pred],
         "prediksi_stok":   [round(float(v), 2) for v in y_pred],
         "last_history":    [round(float(v), 2) for v in raw_vals],
+        "history_months":  history_months,
     }
 
 
@@ -115,18 +118,19 @@ if __name__ == "__main__":
     import argparse, json
 
     p = argparse.ArgumentParser()
-    p.add_argument("--kode", type=str, default="KSA-001", help="Kode produk")
+    p.add_argument("--produk", type=str, default="Chelate HN", help="Nama produk")
     args = p.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, scalers, cfg = load_model_and_scalers(device)
-    raw_df = pd.read_csv(RAW_PATH, parse_dates=["tanggal"])
+    raw_df = pd.read_csv(CSV_PATH)
 
-    result = predict_product(args.kode, model, scalers, cfg, device, raw_df)
+    result = predict_product(args.produk, model, scalers, cfg, device, raw_df)
 
     print(f"\n{'='*50}")
-    print(f"  Prediksi Stok: {result['kode_produk']}")
+    print(f"  Prediksi Stok: {result['produk']}")
     print(f"{'='*50}")
-    for tgl, val in zip(result["tanggal_prediksi"], result["prediksi_stok"]):
-        bar = "█" * max(1, int(val / max(result["prediksi_stok"]) * 30))
-        print(f"  {tgl}  {val:8.1f}  {bar}")
+    for tgl, val in zip(result["bulan_prediksi"], result["prediksi_stok"]):
+        max_val = max(result["prediksi_stok"]) if max(result["prediksi_stok"]) > 0 else 1
+        bar = "█" * max(1, int(val / max_val * 30))
+        print(f"  {tgl}  {val:10.1f} kg  {bar}")

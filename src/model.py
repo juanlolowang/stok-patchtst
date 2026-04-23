@@ -56,14 +56,14 @@ class PatchTST(nn.Module):
 
     def __init__(
         self,
-        seq_len:    int = 60,
-        pred_len:   int = 14,
-        patch_len:  int = 16,
-        stride:     int = 8,
-        d_model:    int = 128,
-        n_heads:    int = 8,
-        n_layers:   int = 3,
-        d_ff:       int = 256,
+        seq_len:    int = 6,
+        pred_len:   int = 3,
+        patch_len:  int = 3,
+        stride:     int = 1,
+        d_model:    int = 64,
+        n_heads:    int = 4,
+        n_layers:   int = 2,
+        d_ff:       int = 128,
         dropout:    float = 0.1,
         n_channels: int = 1,
     ):
@@ -144,11 +144,11 @@ class PatchTST(nn.Module):
 # Quick test
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    model = PatchTST(seq_len=60, pred_len=14, patch_len=16, stride=8,
-                     d_model=128, n_heads=8, n_layers=3, d_ff=256)
-    dummy = torch.randn(32, 1, 60)   # batch=32, channel=1, seq=60
+    model = PatchTST(seq_len=6, pred_len=3, patch_len=3, stride=1,
+                     d_model=64, n_heads=4, n_layers=2, d_ff=128)
+    dummy = torch.randn(32, 1, 6)   # batch=32, channel=1, seq=6
     out   = model(dummy)
     print(f"Input:  {dummy.shape}")
-    print(f"Output: {out.shape}")     # (32, 14)
+    print(f"Output: {out.shape}")     # (32, 3)
     params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Params: {params:,}")

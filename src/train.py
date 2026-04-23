@@ -25,22 +25,22 @@ DEFAULT_CONFIG = dict(
     data_dir   = os.path.join(os.path.dirname(__file__), "..", "data", "processed"),
     models_dir = os.path.join(os.path.dirname(__file__), "..", "models"),
     # Model
-    seq_len    = 60,
-    pred_len   = 14,
-    patch_len  = 16,
-    stride     = 8,
-    d_model    = 128,
-    n_heads    = 8,
-    n_layers   = 3,
-    d_ff       = 256,
+    seq_len    = 6,
+    pred_len   = 3,
+    patch_len  = 3,
+    stride     = 1,
+    d_model    = 64,
+    n_heads    = 4,
+    n_layers   = 2,
+    d_ff       = 128,
     dropout    = 0.1,
     n_channels = 1,
     # Training
     epochs     = 100,
-    batch_size = 64,
+    batch_size = 32,
     lr         = 1e-3,
     weight_decay = 1e-4,
-    patience   = 10,   # early stopping
+    patience   = 15,   # early stopping
     # Misc
     device     = "cuda" if torch.cuda.is_available() else "cpu",
     debug      = False,
@@ -167,7 +167,7 @@ def train(cfg: dict):
 # CLI
 # ---------------------------------------------------------------------------
 def parse_args():
-    p = argparse.ArgumentParser(description="Train PatchTST untuk prediksi stok")
+    p = argparse.ArgumentParser(description="Train PatchTST untuk prediksi stok bahan jadi")
     p.add_argument("--epochs",      type=int,   default=DEFAULT_CONFIG["epochs"])
     p.add_argument("--batch_size",  type=int,   default=DEFAULT_CONFIG["batch_size"])
     p.add_argument("--lr",          type=float, default=DEFAULT_CONFIG["lr"])
@@ -183,6 +183,6 @@ if __name__ == "__main__":
     args = parse_args()
     cfg = {**DEFAULT_CONFIG, **vars(args)}
     print("=" * 60)
-    print("  Prediksi Stok Bahan Jadi Obat Kain — PatchTST Training")
+    print("  Prediksi Stok Bahan Jadi — PatchTST Training")
     print("=" * 60)
     train(cfg)
