@@ -12,8 +12,7 @@ import joblib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-sys.path.insert(0, os.path.dirname(__file__))
-from model import PatchTST
+from model import PatchTST, VanillaLSTM
 
 BASE        = os.path.dirname(__file__)
 DATA_DIR    = os.path.join(BASE, "..", "data", "processed")
@@ -23,32 +22,35 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
-# Metrik
-# ---------------------------------------------------------------------------
-def mae(y_true, y_pred):
-    return np.mean(np.abs(y_true - y_pred))
-
-# Removed RMSE and MAPE functions
-
-
-# ---------------------------------------------------------------------------
 # Load model
 # ---------------------------------------------------------------------------
-def load_model(model_path: str, device):
+def load_model(model_path: str, model_type: str, device):
     ckpt = torch.load(model_path, map_location=device, weights_only=False)
     cfg  = ckpt["config"]
-    model = PatchTST(
-        seq_len    = cfg["seq_len"],
-        pred_len   = cfg["pred_len"],
-        patch_len  = cfg["patch_len"],
-        stride     = cfg["stride"],
-        d_model    = cfg["d_model"],
-        n_heads    = cfg["n_heads"],
-        n_layers   = cfg["n_layers"],
-        d_ff       = cfg["d_ff"],
-        dropout    = cfg["dropout"],
-        n_channels = cfg["n_channels"],
-    ).to(device)
+    
+    if model_type == "patchtst":
+        model = PatchTST(
+            seq_len    = cfg["seq_len"],
+            pred_len   = cfg["pred_len"],
+            patch_len  = cfg["patch_len"],
+            stride     = cfg["stride"],
+            d_model    = cfg["d_model"],
+            n_heads    = cfg["n_heads"],
+            n_layers   = cfg["n_layers"],
+            d_ff       = cfg["d_ff"],
+            dropout    = cfg["dropout"],
+            n_channels = cfg["n_channels"],
+        ).to(device)
+    else:
+        model = VanillaLSTM(
+            seq_len    = cfg["seq_len"],
+            pred_len   = cfg["pred_len"],
+            hidden_dim = cfg["d_model"],
+            n_layers   = cfg["n_layers"],
+            dropout    = cfg["dropout"],
+            n_channels = cfg["n_channels"],
+        ).to(device)
+        
     model.load_state_dict(ckpt["model_state"])
     model.eval()
     return model, cfg
@@ -59,85 +61,77 @@ def load_model(model_path: str, device):
 # ---------------------------------------------------------------------------
 def evaluate():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = os.path.join(MODELS_DIR, "best_model.pt")
-
-    if not os.path.exists(model_path):
-        print("❌ Model belum ditemukan. Jalankan train.py terlebih dahulu.")
-        return
-
-    model, cfg = load_model(model_path, device)
-    print(f"Model dimuat dari: {model_path}")
+    
+    model_files = {
+        "PatchTST": os.path.join(MODELS_DIR, "best_model_patchtst.pt"),
+        "LSTM": os.path.join(MODELS_DIR, "best_model_lstm.pt")
+    }
 
     # Load test data (normalized)
-    X_test = torch.from_numpy(np.load(os.path.join(DATA_DIR, "X_test.npy"))).to(device)
-    y_test = np.load(os.path.join(DATA_DIR, "y_test.npy"))   # tetap di CPU
+    X_test_path = os.path.join(DATA_DIR, "X_test.npy")
+    y_test_path = os.path.join(DATA_DIR, "y_test.npy")
+    
+    if not os.path.exists(X_test_path):
+        print("❌ Data test tidak ditemukan.")
+        return
 
-    # Prediksi
-    with torch.no_grad():
-        y_pred_norm = model(X_test).cpu().numpy()
+    X_test = torch.from_numpy(np.load(X_test_path)).to(device)
+    y_test = np.load(y_test_path)
 
-    # Hitung MAE dan MSE
-    mae_v = np.mean(np.abs(y_test - y_pred_norm))
-    mse_v = np.mean((y_test - y_pred_norm) ** 2)
+    all_metrics = {}
+    
+    print(f"\n{'='*60}")
+    print(f"  {'Model':<15} | {'MAE':<12} | {'MSE':<12}")
+    print(f"{'-'*60}")
 
-    print(f"\n{'='*45}")
-    print(f"  Evaluasi pada Test Set")
-    print(f"{'='*45}")
-    print(f"  MAE : {mae_v:.6f}")
-    print(f"  MSE : {mse_v:.6f}")
-    print(f"{'='*45}")
+    for name, path in model_files.items():
+        if os.path.exists(path):
+            m_type = "patchtst" if "patchtst" in os.path.basename(path) else "lstm"
+            model, cfg = load_model(path, m_type, device)
+            
+            with torch.no_grad():
+                y_pred_norm = model(X_test).cpu().numpy()
+            
+            mae_v = np.mean(np.abs(y_test - y_pred_norm))
+            mse_v = np.mean((y_test - y_pred_norm) ** 2)
+            
+            all_metrics[name] = {"MAE": float(mae_v), "MSE": float(mse_v)}
+            print(f"  {name:<15} | {mae_v:.6f}     | {mse_v:.6f}")
+        else:
+            print(f"  {name:<15} | (Belum ditraining)")
 
-    # Simpan metrik
-    metrics = {
-        "MAE": float(mae_v),
-        "MSE": float(mse_v)
-    }
-    with open(os.path.join(OUT_DIR, "metrics.json"), "w") as f:
-        json.dump(metrics, f, indent=2)
+    print(f"{'='*60}")
 
-    # -----------------------------------------------------------------------
-    # Plot 1: Prediksi vs Aktual (sample titik pertama)
-    # -----------------------------------------------------------------------
-    N = min(200, len(y_test))
-    y_true_flat = y_test[:N, 0]
-    y_pred_flat = y_pred_norm[:N, 0]
+    # Simpan perbandingan
+    if all_metrics:
+        with open(os.path.join(OUT_DIR, "comparison_metrics.json"), "w") as f:
+            json.dump(all_metrics, f, indent=2)
+            
+        # Plot Perbandingan
+        plt.style.use("dark_background")
+        names = list(all_metrics.keys())
+        maes = [all_metrics[n]["MAE"] for n in names]
+        mses = [all_metrics[n]["MSE"] for n in names]
+        
+        x = np.arange(len(names))
+        width = 0.35
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        rects1 = ax.bar(x - width/2, maes, width, label='MAE', color='#7c5cfc')
+        rects2 = ax.bar(x + width/2, mses, width, label='MSE', color='#ff8a65')
+        
+        ax.set_ylabel('Error Score')
+        ax.set_title('Perbandingan Performa: PatchTST vs LSTM')
+        ax.set_xticks(x)
+        ax.set_xticklabels(names)
+        ax.legend()
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(OUT_DIR, "comparison.png"), dpi=150)
+        plt.close()
+        print(f"✅ Plot perbandingan disimpan ke outputs/comparison.png")
 
-    plt.style.use("dark_background")
-    fig, axes = plt.subplots(2, 1, figsize=(14, 8))
-    fig.suptitle("Prediksi Stok Bahan Jadi — PatchTST", fontsize=14, fontweight="bold", color="white")
-
-    ax = axes[0]
-    ax.plot(y_true_flat, label="Aktual",  color="#4FC3F7", linewidth=1.5)
-    ax.plot(y_pred_flat, label="Prediksi",color="#FF8A65", linewidth=1.5, linestyle="--")
-    ax.fill_between(range(N), y_true_flat, y_pred_flat, alpha=0.15, color="#FFD54F")
-    ax.set_title("Prediksi vs Aktual (sample · langkah pertama horizon)", color="white")
-    ax.set_xlabel("Indeks Sampel"); ax.set_ylabel("Stok (ternormalisasi)")
-    ax.legend(); ax.grid(alpha=0.2)
-
-    # -----------------------------------------------------------------------
-    # Plot 2: Learning Curve (dari history.json)
-    # -----------------------------------------------------------------------
-    ax2 = axes[1]
-    hist_path = os.path.join(MODELS_DIR, "history.json")
-    if os.path.exists(hist_path):
-        with open(hist_path) as f:
-            history = json.load(f)
-        ep = range(1, len(history["train_loss"]) + 1)
-        ax2.plot(ep, history["train_loss"], label="Train Loss", color="#81C784")
-        ax2.plot(ep, history["val_loss"],   label="Val Loss",   color="#E57373")
-        ax2.set_title("Learning Curve", color="white")
-        ax2.set_xlabel("Epoch"); ax2.set_ylabel("MSE Loss")
-        ax2.legend(); ax2.grid(alpha=0.2)
-    else:
-        ax2.text(0.5, 0.5, "history.json tidak ditemukan", ha="center", va="center", color="gray")
-
-    plt.tight_layout()
-    out_path = os.path.join(OUT_DIR, "evaluation.png")
-    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="#1a1a2e")
-    plt.close()
-    print(f"\n✅ Plot disimpan → {os.path.abspath(out_path)}")
-
-    return metrics
+    return all_metrics
 
 
 if __name__ == "__main__":

@@ -72,12 +72,12 @@ def load_raw_data():
     return df
 
 @st.cache_resource
-def load_model_resources():
+def load_model_resources(model_type="patchtst"):
     try:
         import torch, joblib
         from predict import load_model_and_scalers
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model, scalers, cfg = load_model_and_scalers(device)
+        model, scalers, cfg = load_model_and_scalers(device, model_type)
         return model, scalers, cfg, device
     except Exception as e:
         return None, None, None, str(e)
@@ -120,12 +120,19 @@ with st.sidebar:
     else:
         st.markdown('<span class="badge-err">✗ Data belum ada</span><br><span style="font-size:0.7rem;color:#888">Jalankan parse_excel.py</span>', unsafe_allow_html=True)
 
-    model_exists = os.path.exists(os.path.join(MODELS_DIR, "best_model.pt"))
+    model_patchtst_exists = os.path.exists(os.path.join(MODELS_DIR, "best_model_patchtst.pt")) or os.path.exists(os.path.join(MODELS_DIR, "best_model.pt"))
+    model_lstm_exists = os.path.exists(os.path.join(MODELS_DIR, "best_model_lstm.pt"))
+    
     st.markdown('<div style="color:#8888aa; font-size:0.75rem; margin-top:8px">Status Model</div>', unsafe_allow_html=True)
-    if model_exists:
-        st.markdown('<span class="badge-ok">✓ Model tersedia</span>', unsafe_allow_html=True)
+    if model_patchtst_exists:
+        st.markdown('<span class="badge-ok">✓ PatchTST tersedia</span>', unsafe_allow_html=True)
     else:
-        st.markdown('<span class="badge-warn">⚠ Belum ditraining</span>', unsafe_allow_html=True)
+        st.markdown('<span class="badge-warn">⚠ PatchTST belum ada</span>', unsafe_allow_html=True)
+        
+    if model_lstm_exists:
+        st.markdown('<span class="badge-ok">✓ LSTM tersedia</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="badge-warn">⚠ LSTM belum ada</span>', unsafe_allow_html=True)
 
 # ── PAGE 1: Beranda ──
 if page == "🏠  Beranda":
@@ -256,13 +263,14 @@ elif page == "🔮  Prediksi":
     st.markdown('<div class="section-title">🔮 Prediksi Kebutuhan Stok</div>', unsafe_allow_html=True)
     if df_all is None:
         st.warning("Data belum ada."); st.stop()
-    if not model_exists:
+    if not model_patchtst_exists and not model_lstm_exists:
         st.error("❌ Model belum ditraining. Jalankan `python src/train.py` terlebih dahulu."); st.stop()
 
     col_l, col_r = st.columns([1, 2])
     with col_l:
         st.markdown("**Pengaturan Prediksi**")
         sel_produk = st.selectbox("Produk:", products)
+        sel_model  = st.selectbox("Pilih Model:", ["PatchTST", "LSTM"], index=0)
         run_btn = st.button("🚀 Jalankan Prediksi", width="stretch")
 
     with col_r:
@@ -272,7 +280,7 @@ elif page == "🔮  Prediksi":
                     import torch
                     from predict import load_model_and_scalers, predict_product
                     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                    model, scalers, cfg = load_model_and_scalers(device)
+                    model, scalers, cfg = load_model_and_scalers(device, sel_model.lower())
                     result = predict_product(sel_produk, model, scalers, cfg, device, df_all)
 
                     preds = result["prediksi_stok"]
@@ -310,49 +318,74 @@ elif page == "🔮  Prediksi":
 
 # ── PAGE 4: Evaluasi ──
 elif page == "📈  Evaluasi Model":
-    st.markdown('<div class="section-title">📈 Evaluasi Model PatchTST</div>', unsafe_allow_html=True)
-    metrics_path = os.path.join(OUT_DIR, "metrics.json")
-    hist_path = os.path.join(MODELS_DIR, "history.json")
-
-    if not model_exists:
+    comparison_path = os.path.join(OUT_DIR, "comparison_metrics.json")
+    
+    if not model_patchtst_exists and not model_lstm_exists:
         st.warning("Model belum ditraining."); st.stop()
 
-    if os.path.exists(metrics_path):
+    if os.path.exists(comparison_path):
+        with open(comparison_path) as f:
+            comp_metrics = json.load(f)
+        
+        st.markdown('<div class="section-title">📊 Perbandingan Performa (Test Set)</div>', unsafe_allow_html=True)
+        
+        # Table comparison
+        comp_data = []
+        for name, m in comp_metrics.items():
+            comp_data.append({"Model": name, "MAE": f"{m['MAE']:.6f}", "MSE": f"{m['MSE']:.6f}"})
+        st.table(pd.DataFrame(comp_data))
+
+        col1, col2 = st.columns(2)
+        # Show comparison plot if exists
+        comp_img = os.path.join(OUT_DIR, "comparison.png")
+        if os.path.exists(comp_img):
+            st.image(comp_img, caption="Perbandingan MAE & MSE", use_container_width=True)
+    elif os.path.exists(metrics_path):
+        # Fallback to single metrics if comparison not yet generated
         with open(metrics_path) as f:
             metrics = json.load(f)
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f'<div class="metric-card"><div class="metric-val">{metrics["MSE"]:.6f}</div><div class="metric-label">MSE</div><div class="metric-unit">Mean Squared Error</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card"><div class="metric-val">{metrics["MSE"]:.6f}</div><div class="metric-label">MSE (PatchTST)</div></div>', unsafe_allow_html=True)
         with col2:
-            st.markdown(f'<div class="metric-card"><div class="metric-val">{metrics["MAE"]:.6f}</div><div class="metric-label">MAE</div><div class="metric-unit">Mean Absolute Error</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card"><div class="metric-val">{metrics["MAE"]:.6f}</div><div class="metric-label">MAE (PatchTST)</div></div>', unsafe_allow_html=True)
     else:
         st.info("Metrik belum tersedia. Jalankan `python src/evaluate.py`.")
 
     st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="section-title">📉 Learning Curve</div>', unsafe_allow_html=True)
+    sel_hist = st.selectbox("Pilih Model untuk Learning Curve:", ["PatchTST", "LSTM"])
+    hist_file = os.path.join(MODELS_DIR, f"history_{sel_hist.lower()}.json")
 
-    if os.path.exists(hist_path):
-        st.markdown('<div class="section-title">📉 Learning Curve</div>', unsafe_allow_html=True)
-        with open(hist_path) as f:
+    if os.path.exists(hist_file):
+        with open(hist_file) as f:
             history = json.load(f)
         epochs = list(range(1, len(history["train_loss"]) + 1))
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=epochs, y=history["train_loss"], mode="lines", name="Train Loss", line=dict(color="#81c784", width=2)))
         fig.add_trace(go.Scatter(x=epochs, y=history["val_loss"], mode="lines", name="Val Loss", line=dict(color="#e57373", width=2)))
-        fig.update_layout(**PLOTLY_LAYOUT, title="Training vs Validation Loss", xaxis_title="Epoch", yaxis_title="MSE Loss")
+        fig.update_layout(**PLOTLY_LAYOUT, title=f"Training vs Validation Loss — {sel_hist}", xaxis_title="Epoch", yaxis_title="MSE Loss")
         st.plotly_chart(fig, width="stretch")
+    else:
+        st.info(f"History untuk {sel_hist} belum tersedia.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    ckpt_path = os.path.join(MODELS_DIR, f"best_model_{sel_hist.lower()}.pt")
+    # Fallback to old name for PatchTST if new name doesn't exist
+    if not os.path.exists(ckpt_path) and sel_hist == "PatchTST":
+        ckpt_path = os.path.join(MODELS_DIR, "best_model.pt")
+
+    if os.path.exists(ckpt_path):
+        import torch
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        cfg = ckpt.get("config", {})
+        with st.expander(f"ℹ️ Detail Konfigurasi {sel_hist}"):
+            st.json({"Epoch terbaik": ckpt.get("epoch", "-"), "Val Loss terbaik": f"{ckpt.get('val_loss', '-'):.6f}",
+                      "seq_len": cfg.get("seq_len"), "pred_len": cfg.get("pred_len"), "patch_len": cfg.get("patch_len"),
+                      "stride": cfg.get("stride"), "d_model": cfg.get("d_model"), "n_heads": cfg.get("n_heads"),
+                      "n_layers": cfg.get("n_layers"), "dropout": cfg.get("dropout")})
 
     eval_img = os.path.join(OUT_DIR, "evaluation.png")
     if os.path.exists(eval_img):
         st.markdown('<div class="section-title">🖼 Plot Prediksi vs Aktual</div>', unsafe_allow_html=True)
         st.image(eval_img, width="stretch")
-
-    ckpt_path = os.path.join(MODELS_DIR, "best_model.pt")
-    if os.path.exists(ckpt_path):
-        import torch
-        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        cfg = ckpt.get("config", {})
-        with st.expander("ℹ️ Detail Konfigurasi Model"):
-            st.json({"Epoch terbaik": ckpt.get("epoch", "-"), "Val Loss terbaik": f"{ckpt.get('val_loss', '-'):.6f}",
-                      "seq_len": cfg.get("seq_len"), "pred_len": cfg.get("pred_len"), "patch_len": cfg.get("patch_len"),
-                      "stride": cfg.get("stride"), "d_model": cfg.get("d_model"), "n_heads": cfg.get("n_heads"),
-                      "n_layers": cfg.get("n_layers"), "dropout": cfg.get("dropout")})

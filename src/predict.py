@@ -12,38 +12,55 @@ import torch
 import joblib
 
 sys.path.insert(0, os.path.dirname(__file__))
-from model import PatchTST
+from model import PatchTST, VanillaLSTM
 
 BASE       = os.path.dirname(__file__)
 MODELS_DIR = os.path.join(BASE, "..", "models")
 CSV_PATH   = os.path.join(BASE, "..", "data", "processed", "bahan_jadi_bulanan.csv")
 
 
-def load_model_and_scalers(device: torch.device):
+def load_model_and_scalers(device: torch.device, model_type: str = "patchtst"):
     """Muat model terbaik dan scalers dari disk."""
-    model_path  = os.path.join(MODELS_DIR, "best_model.pt")
+    model_name = model_type.lower()
+    model_path  = os.path.join(MODELS_DIR, f"best_model_{model_name}.pt")
+    
+    # Fallback to old name if new name doesn't exist yet
+    if not os.path.exists(model_path) and model_name == "patchtst":
+        model_path = os.path.join(MODELS_DIR, "best_model.pt")
+
     scaler_path = os.path.join(MODELS_DIR, "scalers.pkl")
 
     if not os.path.exists(model_path):
-        raise FileNotFoundError("Model belum ada. Jalankan train.py terlebih dahulu.")
+        raise FileNotFoundError(f"Model {model_name} belum ada. Jalankan train.py --model {model_name} terlebih dahulu.")
     if not os.path.exists(scaler_path):
         raise FileNotFoundError("Scalers belum ada. Jalankan preprocess.py terlebih dahulu.")
 
     ckpt = torch.load(model_path, map_location=device, weights_only=False)
     cfg  = ckpt["config"]
 
-    model = PatchTST(
-        seq_len    = cfg["seq_len"],
-        pred_len   = cfg["pred_len"],
-        patch_len  = cfg["patch_len"],
-        stride     = cfg["stride"],
-        d_model    = cfg["d_model"],
-        n_heads    = cfg["n_heads"],
-        n_layers   = cfg["n_layers"],
-        d_ff       = cfg["d_ff"],
-        dropout    = cfg["dropout"],
-        n_channels = cfg["n_channels"],
-    ).to(device)
+    if model_name == "patchtst":
+        model = PatchTST(
+            seq_len    = cfg["seq_len"],
+            pred_len   = cfg["pred_len"],
+            patch_len  = cfg["patch_len"],
+            stride     = cfg["stride"],
+            d_model    = cfg["d_model"],
+            n_heads    = cfg["n_heads"],
+            n_layers   = cfg["n_layers"],
+            d_ff       = cfg["d_ff"],
+            dropout    = cfg["dropout"],
+            n_channels = cfg["n_channels"],
+        ).to(device)
+    else:
+        model = VanillaLSTM(
+            seq_len    = cfg["seq_len"],
+            pred_len   = cfg["pred_len"],
+            hidden_dim = cfg["d_model"],
+            n_layers   = cfg["n_layers"],
+            dropout    = cfg["dropout"],
+            n_channels = cfg["n_channels"],
+        ).to(device)
+
     model.load_state_dict(ckpt["model_state"])
     model.eval()
 
@@ -53,7 +70,7 @@ def load_model_and_scalers(device: torch.device):
 
 def predict_product(
     produk: str,
-    model: PatchTST,
+    model: nn.Module,
     scalers: dict,
     cfg: dict,
     device: torch.device,

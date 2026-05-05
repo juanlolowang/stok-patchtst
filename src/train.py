@@ -15,7 +15,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 # Pastikan src/ ada di path
 sys.path.insert(0, os.path.dirname(__file__))
-from model import PatchTST
+from model import PatchTST, VanillaLSTM
 
 # ---------------------------------------------------------------------------
 # Konfigurasi default
@@ -42,6 +42,7 @@ DEFAULT_CONFIG = dict(
     weight_decay = 1e-4,
     patience   = 15,   # early stopping
     # Misc
+    model_type = "patchtst", # default
     device     = "cuda" if torch.cuda.is_available() else "cpu",
     debug      = False,
 )
@@ -72,21 +73,33 @@ def train(cfg: dict):
     print(f"Train batches: {len(train_loader)} | Val batches: {len(val_loader)}")
 
     # --- Model ---
-    model = PatchTST(
-        seq_len    = cfg["seq_len"],
-        pred_len   = cfg["pred_len"],
-        patch_len  = cfg["patch_len"],
-        stride     = cfg["stride"],
-        d_model    = cfg["d_model"],
-        n_heads    = cfg["n_heads"],
-        n_layers   = cfg["n_layers"],
-        d_ff       = cfg["d_ff"],
-        dropout    = cfg["dropout"],
-        n_channels = cfg["n_channels"],
-    ).to(device)
+    if cfg["model_type"].lower() == "patchtst":
+        model = PatchTST(
+            seq_len    = cfg["seq_len"],
+            pred_len   = cfg["pred_len"],
+            patch_len  = cfg["patch_len"],
+            stride     = cfg["stride"],
+            d_model    = cfg["d_model"],
+            n_heads    = cfg["n_heads"],
+            n_layers   = cfg["n_layers"],
+            d_ff       = cfg["d_ff"],
+            dropout    = cfg["dropout"],
+            n_channels = cfg["n_channels"],
+        ).to(device)
+    elif cfg["model_type"].lower() == "lstm":
+        model = VanillaLSTM(
+            seq_len    = cfg["seq_len"],
+            pred_len   = cfg["pred_len"],
+            hidden_dim = cfg["d_model"],
+            n_layers   = cfg["n_layers"],
+            dropout    = cfg["dropout"],
+            n_channels = cfg["n_channels"],
+        ).to(device)
+    else:
+        raise ValueError(f"Model type {cfg['model_type']} tidak didukung.")
 
     params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"PatchTST params: {params:,}")
+    print(f"{cfg['model_type'].upper()} params: {params:,}")
 
     # --- Optimizer & Scheduler ---
     optimizer = AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
@@ -96,7 +109,8 @@ def train(cfg: dict):
     # --- Training Loop ---
     best_val_loss = float("inf")
     epochs_no_improve = 0
-    best_model_path = os.path.join(cfg["models_dir"], "best_model.pt")
+    model_name = cfg["model_type"].lower()
+    best_model_path = os.path.join(cfg["models_dir"], f"best_model_{model_name}.pt")
     history = {"train_loss": [], "val_loss": []}
 
     max_epochs = 5 if cfg.get("debug") else cfg["epochs"]
@@ -155,7 +169,7 @@ def train(cfg: dict):
 
     # Simpan history
     import json
-    with open(os.path.join(cfg["models_dir"], "history.json"), "w") as f:
+    with open(os.path.join(cfg["models_dir"], f"history_{model_name}.json"), "w") as f:
         json.dump(history, f, indent=2)
 
     print(f"\n🎉 Training selesai! Best val_loss={best_val_loss:.6f}")
@@ -167,7 +181,8 @@ def train(cfg: dict):
 # CLI
 # ---------------------------------------------------------------------------
 def parse_args():
-    p = argparse.ArgumentParser(description="Train PatchTST untuk prediksi stok bahan jadi")
+    p = argparse.ArgumentParser(description="Train model untuk prediksi stok bahan jadi")
+    p.add_argument("--model",       type=str,   default=DEFAULT_CONFIG["model_type"], choices=["patchtst", "lstm"])
     p.add_argument("--epochs",      type=int,   default=DEFAULT_CONFIG["epochs"])
     p.add_argument("--batch_size",  type=int,   default=DEFAULT_CONFIG["batch_size"])
     p.add_argument("--lr",          type=float, default=DEFAULT_CONFIG["lr"])
@@ -182,7 +197,9 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     cfg = {**DEFAULT_CONFIG, **vars(args)}
+    if args.model: cfg["model_type"] = args.model
+    
     print("=" * 60)
-    print("  Prediksi Stok Bahan Jadi — PatchTST Training")
+    print(f"  Prediksi Stok Bahan Jadi — {cfg['model_type'].upper()} Training")
     print("=" * 60)
     train(cfg)
